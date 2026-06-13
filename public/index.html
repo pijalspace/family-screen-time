@@ -618,9 +618,6 @@
         document.getElementById("childBalancesList").innerHTML = `<p>🧑 Umar: ${umar.data()?.balanceMinutes || 0} min &nbsp; 👩 Muaz: ${muaz.data()?.balanceMinutes || 0} min</p>`;
     }
 
-    // Helper getDocs for queries
-    async function getDocs(querySnap) { const snap = await querySnap; return snap; }
-
     // ---------- AUTH & UI SWITCHING ----------
     function showParentContent(show) {
         document.getElementById("parentAuthPanel").style.display = show ? "none" : "block";
