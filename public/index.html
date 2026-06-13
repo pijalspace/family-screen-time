@@ -525,25 +525,89 @@
     }
 
     async function loadAuditLog() {
-        const submissions = await getDocs(query(collection(db, "submissions"), where("status", "in", ["approved","rejected"]), orderBy("createdAt", "desc"), limit(30)));
-        const redemptions = await getDocs(query(collection(db, "redemptions"), orderBy("createdAt", "desc"), limit(40)));
+        const submissionsQuery = query(
+            collection(db, "submissions"),
+            where("status", "in", ["approved", "rejected"]),
+            orderBy("createdAt", "desc"),
+            limit(30)
+        );
+        const redemptionsQuery = query(
+            collection(db, "redemptions"),
+            orderBy("createdAt", "desc"),
+            limit(40)
+        );
+    
+        const [submissionsSnap, redemptionsSnap] = await Promise.all([
+            getDocs(submissionsQuery),
+            getDocs(redemptionsQuery)
+        ]);
+    
         let items = [];
-        submissions.forEach(d => { const data = d.data(); items.push({ time: data.createdAt?.toDate(), text: `${data.childId === "child_umar" ? "Umar" : "Muaz"} | Study ${data.status} | ${data.earnedMinutes || 0} min` }); });
-        redemptions.forEach(d => { const data = d.data(); items.push({ time: data.createdAt?.toDate(), text: `${data.childId === "child_umar" ? "Umar" : "Muaz"} | ${data.type === "manual_adjust" ? "Manual" : "Redeemed"} | ${data.minutes} min` }); });
-        items.sort((a,b) => b.time - a.time);
-        document.getElementById("auditLogList").innerHTML = items.slice(0,50).map(i => `<div class="audit-item">📅 ${i.time.toLocaleString()} · ${i.text}</div>`).join("");
+        submissionsSnap.forEach(doc => {
+            const data = doc.data();
+            items.push({
+                time: data.createdAt?.toDate(),
+                text: `${data.childId === "child_umar" ? "Umar" : "Muaz"} | Study ${data.status} | ${data.earnedMinutes || 0} min`
+            });
+        });
+        redemptionsSnap.forEach(doc => {
+            const data = doc.data();
+            items.push({
+                time: data.createdAt?.toDate(),
+                text: `${data.childId === "child_umar" ? "Umar" : "Muaz"} | ${data.type === "manual_adjust" ? "Manual" : "Redeemed"} | ${data.minutes} min`
+            });
+        });
+    
+        items.sort((a, b) => b.time - a.time);
+        const container = document.getElementById("auditLogList");
+        if (container) {
+            container.innerHTML = items.slice(0, 50).map(i => 
+                `<div class="audit-item">📅 ${i.time.toLocaleString()} · ${i.text}</div>`
+            ).join("");
+        }
     }
 
     async function loadWeeklyChart() {
-        const weekAgo = new Date(Date.now() - 7*86400000);
-        const approved = await getDocs(query(collection(db, "submissions"), where("status", "==", "approved"), where("createdAt", ">=", weekAgo)));
-        let study = 0; approved.forEach(d => study += d.data().earnedMinutes || 0);
-        const redemptions = await getDocs(query(collection(db, "redemptions"), where("type", "==", "redemption"), where("createdAt", ">=", weekAgo)));
-        let screen = 0; redemptions.forEach(r => screen += r.data().minutes || 0);
+        const weekAgo = new Date(Date.now() - 7 * 86400000);
+    
+        const approvedQuery = query(
+            collection(db, "submissions"),
+            where("status", "==", "approved"),
+            where("createdAt", ">=", weekAgo)
+        );
+        const redemptionsQuery = query(
+            collection(db, "redemptions"),
+            where("type", "==", "redemption"),
+            where("createdAt", ">=", weekAgo)
+        );
+    
+        const [approvedSnap, redemptionsSnap] = await Promise.all([
+            getDocs(approvedQuery),
+            getDocs(redemptionsQuery)
+        ]);
+    
+        let study = 0;
+        approvedSnap.forEach(doc => {
+            study += doc.data().earnedMinutes || 0;
+        });
+    
+        let screen = 0;
+        redemptionsSnap.forEach(doc => {
+            screen += doc.data().minutes || 0;
+        });
+    
         const ctx = document.getElementById('weeklyChart').getContext('2d');
         if (weeklyChartInstance) weeklyChartInstance.destroy();
         weeklyChartInstance = new Chart(ctx, {
-            type: 'bar', data: { labels: ['Study 📚', 'Screen 🎮'], datasets: [{ label: 'Last 7 days (minutes)', data: [study, screen], backgroundColor: ['#3b82f6', '#f97316'] }] },
+            type: 'bar',
+            data: {
+                labels: ['Study 📚', 'Screen 🎮'],
+                datasets: [{
+                    label: 'Last 7 days (minutes)',
+                    data: [study, screen],
+                    backgroundColor: ['#3b82f6', '#f97316']
+                }]
+            },
             options: { responsive: true, maintainAspectRatio: true }
         });
     }
