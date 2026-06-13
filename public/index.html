@@ -387,7 +387,7 @@
 
     // ----- CLOUDINARY UPLOAD (No CORS issues) -----
     const CLOUDINARY_CLOUD_NAME = "dl5j0eiz9"; // 👈 Paste your Cloud name
-    const CLOUDINARY_UPLOAD_PRESET = "screen_time_uploads"; // 👈 Your preset name
+    const CLOUDINARY_UPLOAD_PRESET = "screen-time-uploads"; // 👈 Your preset name
 
     async function resizeImageToBlob(file, maxWidth = 800, quality = 0.8) {
         if (!file.type.startsWith('image/')) return file;
@@ -422,8 +422,8 @@
             { method: "POST", body: formData }
         );
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error?.message || "Cloudinary upload failed");
+            const errorData = await response.json();
+            throw new Error(errorData.error.message || "Cloudinary upload failed");
         }
         const data = await response.json();
         return data.secure_url; // Direct image URL (works anywhere)
