@@ -2,511 +2,639 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Family Screen-Time Manager</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        :root { --primary: #4CAF50; --secondary: #FF9800; --danger: #F44336; --bg: #F0F4F8; --card: #FFFFFF; --text: #333333; }
-        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { margin: 0; background: var(--bg); color: var(--text); padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; }
-        .card { background: var(--card); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        h1, h2, h3 { margin-top: 0; }
-        .btn { padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; margin: 5px; }
-        .btn-primary { background: var(--primary); color: white; }
-        .btn-secondary { background: var(--secondary); color: white; }
-        .btn-danger { background: var(--danger); color: white; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .mode-toggle { text-align: center; margin-bottom: 20px; }
-        .hidden { display: none !important; }
-        .profile-select { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
-        .profile-btn { font-size: 20px; padding: 15px 30px; border: 3px solid transparent; }
-        .profile-btn.active { border-color: var(--primary); background: #E8F5E9; }
-        .balance-display { font-size: 24px; text-align: center; font-weight: bold; color: var(--primary); margin: 20px 0; }
-        .timer-display { font-size: 32px; text-align: center; color: var(--secondary); font-weight: bold; margin: 20px 0; }
-        .timer-warning { color: var(--danger); animation: pulse 1s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-        .redeem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-        input, textarea, select { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
-        .submission-item { border: 1px solid #eee; border-radius: 8px; padding: 15px; margin-bottom: 15px; display: flex; gap: 15px; align-items: flex-start; }
-        .submission-item img { width: 100px; height: 100px; object-fit: cover; border-radius: 6px; background: #eee; }
-        .submission-details { flex: 1; }
-        .slider-container { margin: 10px 0; }
-        .slider-container label { display: block; font-weight: bold; margin-bottom: 5px; }
-        .chart-container { position: relative; height: 300px; width: 100%; }
-        .admin-controls { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="mode-toggle">
-            <button class="btn btn-primary" onclick="setMode('kid')">👦 Kid Mode</button>
-            <button class="btn btn-secondary" onclick="setMode('parent')">🔒 Parent Mode</button>
-        </div>
-
-        <!-- KID MODE -->
-        <div id="kidMode" class="hidden">
-            <div class="card">
-                <h2>👋 Who is using the device?</h2>
-                <div class="profile-select">
-                    <button class="btn profile-btn" onclick="selectChild('umar')">👦 Umar (14)</button>
-                    <button class="btn profile-btn" onclick="selectChild('muaz')">👦 Muaz (13)</button>
-                </div>
-            </div>
-
-            <div id="kidDashboard" class="hidden">
-                <div class="card">
-                    <h2>⏱️ Screen Time Balance</h2>
-                    <div class="balance-display" id="balanceDisplay">Loading...</div>
-                    <div id="activeTimer" class="hidden">
-                        <div class="timer-display" id="timerDisplay">00:00</div>
-                        <p style="text-align:center; color: var(--danger);" id="timerWarning" class="hidden">⚠️ 5 minutes remaining!</p>
-                        <button class="btn btn-danger" style="width:100%" onclick="stopTimer()">Stop Timer Early</button>
-                    </div>
-                    <div id="redeemSection">
-                        <h3>Redeem Minutes</h3>
-                        <div class="redeem-grid">
-                            <button class="btn btn-secondary" onclick="redeemTime(15)">15 min</button>
-                            <button class="btn btn-secondary" onclick="redeemTime(30)">30 min</button>
-                            <button class="btn btn-secondary" onclick="redeemTime(60)">60 min</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h2>📚 Submit Study Request</h2>
-                    <form id="studyForm" onsubmit="handleStudySubmit(event)">
-                        <input type="text" id="subject" placeholder="Subject (e.g., Math)" required>
-                        <textarea id="description" rows="3" placeholder="What did you study?" required></textarea>
-                        <label>📸 Proof (Photo):</label>
-                        <input type="file" id="proofFile" accept="image/*" capture="environment" required>
-                        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:10px;" id="submitBtn">Submit for Approval</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- PARENT MODE -->
-        <div id="parentMode" class="hidden">
-            <div id="parentAuth" class="card auth-form">
-                <h2>🔐 Parent Login</h2>
-                <input type="email" id="parentEmail" placeholder="Email">
-                <input type="password" id="parentPassword" placeholder="Password">
-                <button class="btn btn-primary" style="width:100%" onclick="parentLogin()">Login</button>
-            </div>
-
-            <div id="parentDashboard" class="hidden">
-                <div class="card">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <h2>👨‍👩‍👦 Parent Dashboard</h2>
-                        <button class="btn btn-danger" onclick="parentLogout()">Logout</button>
-                    </div>
-                    <button class="btn btn-secondary" onclick="initializeKids()">⚙️ Initialize Kids (Run Once)</button>
-                </div>
-
-                <div class="card">
-                    <h3>⏳ Pending Approvals</h3>
-                    <div id="pendingList">Loading...</div>
-                </div>
-
-                <div class="card">
-                    <h3>📊 Weekly Activity (Last 7 Days)</h3>
-                    <div class="chart-container">
-                        <canvas id="weeklyChart"></canvas>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h3>🛠️ Admin: Adjust Minutes</h3>
-                    <div class="admin-controls">
-                        <select id="adminChildSelect">
-                            <option value="umar">Umar</option>
-                            <option value="muaz">Muaz</option>
-                        </select>
-                        <input type="number" id="adminMinutes" placeholder="Minutes (+ or -)" style="width:150px">
-                        <button class="btn btn-primary" onclick="adminAdjustMinutes()">Apply</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>ScreenTime | Family Manager</title>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- Firebase v9 -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, addDoc, updateDoc, onSnapshot, query, where, orderBy, getDocs, increment, serverTimestamp, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-
-        // ==========================================
-        // 🔥 REPLACE WITH YOUR FIREBASE CONFIG
-        // ==========================================
-        const firebaseConfig = {
+        // -------------------- 🔧 REPLACE WITH YOUR FIREBASE CONFIG --------------------
+        window.FIREBASE_CONFIG = {
             apiKey: "AIzaSyBiVBIr7TSRmKbtysUXe34fB3xu1gA8EVM",
             authDomain: "family-screen-time-8807.firebaseapp.com",
             projectId: "family-screen-time-8807",
-            storageBucket: "family-screen-time-8807.firebasestorage.app", // Can leave this, we just won't use the Storage SDK
+            storageBucket: "family-screen-time-8807.firebasestorage.app",
             messagingSenderId: "239195020999",
             appId: "1:239195020999:web:b38a95bbbd81fd309b28e2"
         };
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        enableIndexedDbPersistence(db).catch((err) => {
-            if (err.code == 'failed-precondition') console.log('Persistence error: multiple tabs');
-            else if (err.code == 'unimplemented') console.log('Persistence not supported');
-        });
-
-        let currentChild = null;
-        let timerInterval = null;
-        let weeklyChartInstance = null;
-
-        window.setMode = (mode) => {
-            document.getElementById('kidMode').classList.toggle('hidden', mode !== 'kid');
-            document.getElementById('parentMode').classList.toggle('hidden', mode !== 'parent');
-            if (mode === 'parent') checkParentAuth();
-        };
-
-        window.selectChild = (childId) => {
-            currentChild = childId;
-            document.querySelectorAll('.profile-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
-            document.getElementById('kidDashboard').classList.remove('hidden');
-            loadChildData(childId);
-            checkActiveTimer();
-        };
-
-        function loadChildData(childId) {
-            onSnapshot(doc(db, "children", childId), (doc) => {
-                if (doc.exists()) {
-                    document.getElementById('balanceDisplay').innerText = `${doc.data().balanceMinutes} minutes available`;
-                } else {
-                    document.getElementById('balanceDisplay').innerText = "Profile not initialized. Ask parent to run 'Initialize Kids'.";
-                }
-            });
-        }
-
-        // 🌟 NEW: Resize and convert to Base64 (No Storage needed!)
-        async function imageToBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        let width = img.width;
-                        let height = img.height;
-                        const maxWidth = 800; // Resize to max 800px width
-                        if (width > maxWidth) {
-                            height = Math.round((height * maxWidth) / width);
-                            width = maxWidth;
-                        }
-                        canvas.width = width;
-                        canvas.height = height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, width, height);
-                        // Compress to JPEG at 70% quality. 
-                        // Result is typically ~150-250KB, well under Firestore's 1MB limit.
-                        const base64String = canvas.toDataURL('image/jpeg', 0.7);
-                        resolve(base64String);
-                    };
-                    img.onerror = reject;
-                    img.src = e.target.result;
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-        }
-
-        window.handleStudySubmit = async (e) => {
-            e.preventDefault();
-            if (!currentChild) return alert("Select a profile first!");
-            
-            const btn = document.getElementById('submitBtn');
-            btn.disabled = true;
-            btn.innerText = "Processing...";
-
-            try {
-                const fileInput = document.getElementById('proofFile');
-                const photoBase64 = await imageToBase64(fileInput.files[0]);
-                
-                // Safety check: Firestore max document size is 1 MiB (1,048,576 bytes)
-                // Base64 string length * 0.75 approximates byte size.
-                const approxSizeBytes = photoBase64.length * 0.75;
-                if (approxSizeBytes > 900000) {
-                    throw new Error("Image is still too large. Please choose a smaller photo.");
-                }
-
-                await addDoc(collection(db, "submissions"), {
-                    childId: currentChild,
-                    subject: document.getElementById('subject').value,
-                    description: document.getElementById('description').value,
-                    photoBase64: photoBase64, // 🌟 Saved directly in Firestore!
-                    status: 'pending',
-                    earnedMinutes: 0,
-                    createdAt: serverTimestamp()
-                });
-
-                alert("✅ Study request submitted!");
-                document.getElementById('studyForm').reset();
-            } catch (error) {
-                console.error(error);
-                alert("Error: " + error.message);
-            } finally {
-                btn.disabled = false;
-                btn.innerText = "Submit for Approval";
-            }
-        };
-
-        window.redeemTime = async (minutes) => {
-            if (!currentChild) return;
-            const childRef = doc(db, "children", currentChild);
-            try {
-                await addDoc(collection(db, "redemptions"), {
-                    childId: currentChild,
-                    minutes: minutes,
-                    startTime: Date.now(),
-                    endTime: Date.now() + (minutes * 60000),
-                    completed: false,
-                    createdAt: serverTimestamp()
-                });
-                await updateDoc(childRef, { balanceMinutes: increment(-minutes) });
-                startTimer(minutes);
-                alert(`🎉 Enjoy your ${minutes} minutes!`);
-            } catch (error) {
-                alert("Not enough minutes or error: " + error.message);
-            }
-        };
-
-        function startTimer(minutes) {
-            const endTime = Date.now() + (minutes * 60000);
-            localStorage.setItem('activeTimer', JSON.stringify({ endTime, childId: currentChild }));
-            checkActiveTimer();
-        }
-
-        function checkActiveTimer() {
-            if (timerInterval) clearInterval(timerInterval);
-            const timerData = JSON.parse(localStorage.getItem('activeTimer'));
-            
-            if (!timerData || timerData.childId !== currentChild) {
-                document.getElementById('activeTimer').classList.add('hidden');
-                document.getElementById('redeemSection').classList.remove('hidden');
-                return;
-            }
-
-            document.getElementById('activeTimer').classList.remove('hidden');
-            document.getElementById('redeemSection').classList.add('hidden');
-
-            timerInterval = setInterval(() => {
-                const remaining = timerData.endTime - Date.now();
-                if (remaining <= 0) {
-                    clearInterval(timerInterval);
-                    localStorage.removeItem('activeTimer');
-                    document.getElementById('timerDisplay').innerText = "00:00";
-                    document.getElementById('timerWarning').classList.add('hidden');
-                    alert("⏰ Time's up! Screen time is over.");
-                    document.getElementById('activeTimer').classList.add('hidden');
-                    document.getElementById('redeemSection').classList.remove('hidden');
-                    return;
-                }
-
-                const mins = Math.floor(remaining / 60000);
-                const secs = Math.floor((remaining % 60000) / 1000);
-                document.getElementById('timerDisplay').innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-
-                if (remaining <= 5 * 60 * 1000) {
-                    document.getElementById('timerWarning').classList.remove('hidden');
-                }
-            }, 1000);
-        }
-
-        window.stopTimer = () => {
-            if (confirm("Stop timer early? Remaining minutes will NOT be refunded.")) {
-                clearInterval(timerInterval);
-                localStorage.removeItem('activeTimer');
-                document.getElementById('activeTimer').classList.add('hidden');
-                document.getElementById('redeemSection').classList.remove('hidden');
-            }
-        };
-
-        checkActiveTimer();
-
-        // ================= PARENT FUNCTIONS =================
-        window.parentLogin = async () => {
-            const email = document.getElementById('parentEmail').value;
-            const password = document.getElementById('parentPassword').value;
-            try {
-                await signInWithEmailAndPassword(auth, email, password);
-            } catch (error) {
-                alert("Login failed: " + error.message);
-            }
-        };
-
-        window.parentLogout = () => signOut(auth);
-
-        function checkParentAuth() {
-            onAuthStateChanged(auth, (user) => {
-                if (user) {
-                    document.getElementById('parentAuth').classList.add('hidden');
-                    document.getElementById('parentDashboard').classList.remove('hidden');
-                    loadParentDashboard();
-                } else {
-                    document.getElementById('parentAuth').classList.remove('hidden');
-                    document.getElementById('parentDashboard').classList.add('hidden');
-                }
-            });
-        }
-
-        window.initializeKids = async () => {
-            try {
-                await setDoc(doc(db, "children", "umar"), { name: "Umar", balanceMinutes: 0, createdAt: serverTimestamp() }, { merge: true });
-                await setDoc(doc(db, "children", "muaz"), { name: "Muaz", balanceMinutes: 0, createdAt: serverTimestamp() }, { merge: true });
-                alert("✅ Kids initialized!");
-            } catch (e) {
-                alert("Error: " + e.message);
-            }
-        };
-
-    function loadParentDashboard() {
-        // Real-time pending submissions
-        const q = query(
-            collection(db, "submissions"), 
-            where("status", "==", "pending"), 
-            orderBy("createdAt", "desc")
-        );
-    
-        onSnapshot(q, (snapshot) => {
-            const list = document.getElementById('pendingList');
-            list.innerHTML = "";
-        
-            if (snapshot.empty) {
-                list.innerHTML = "<p>No pending requests. Great job, kids! 🎉</p>";
-                return;
-            }
-        
-            snapshot.forEach((docSnap) => {
-                const data = docSnap.data();
-                const div = document.createElement('div');
-                div.className = 'submission-item';
-                div.innerHTML = `
-                    <img src="${data.photoBase64}" alt="Proof" onerror="this.style.display='none'">
-                    <div class="submission-details">
-                        <strong>${data.childId.toUpperCase()}</strong> - ${data.subject}<br>
-                        <small>${data.description}</small><br>
-                        <div class="slider-container">
-                            <label>Minutes to award: <span id="val-${docSnap.id}">20</span></label>
-                            <input type="range" min="5" max="60" value="20" style="width:100%" 
-                                oninput="document.getElementById('val-${docSnap.id}').innerText = this.value"
-                                id="slider-${docSnap.id}">
-                        </div>
-                        <button class="btn btn-primary" onclick="approveSubmission('${docSnap.id}', '${data.childId}')">Approve</button>
-                        <button class="btn btn-danger" onclick="rejectSubmission('${docSnap.id}')">Reject</button>
-                    </div>
-                `;
-                list.appendChild(div);
-            });
-        }, (error) => {
-            console.error("Error loading submissions:", error);
-        });
-    
-        loadWeeklyChart();
-    }
-    
-        window.approveSubmission = async (subId, childId) => {
-            const minutes = parseInt(document.getElementById(`slider-${subId}`).value);
-            try {
-                console.log("Approving submission:", subId, "for", minutes, "minutes");
-
-                await updateDoc(doc(db, "submissions", subId), {
-                    status: 'approved',
-                    earnedMinutes: minutes,
-                    approvedAt: serverTimestamp()
-                });
-
-                await updateDoc(doc(db, "children", childId), {
-                    balanceMinutes: increment(minutes)
-                });
-
-                console.log("✅ Approved successfully!");
-            } catch (e) {
-                alert("Error approving: " + e.message);
-            }
-        };
-
-        window.rejectSubmission = async (subId) => {
-            try {
-                console.log("Rejecting submission:", subId);
-
-                await updateDoc(doc(db, "submissions", subId), {
-                    status: 'rejected',
-                    approvedAt: serverTimestamp()
-                });
-
-                console.log("✅ Rejected successfully!");
-            } catch (e) {
-                console.error("Error rejecting:", e);
-                alert("Error rejecting: " + e.message);
-            }
-        };
-
-        window.adminAdjustMinutes = async () => {
-            const childId = document.getElementById('adminChildSelect').value;
-            const mins = parseInt(document.getElementById('adminMinutes').value);
-            if (!mins) return;
-            try {
-                await updateDoc(doc(db, "children", childId), {
-                    balanceMinutes: increment(mins)
-                });
-                alert(`✅ Adjusted ${childId}'s balance by ${mins} minutes.`);
-                document.getElementById('adminMinutes').value = '';
-            } catch (e) {
-                alert("Error: " + e.message);
-            }
-        };
-
-        async function loadWeeklyChart() {
-            const sevenDaysAgo = new Date();
-            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-            const subQuery = query(collection(db, "submissions"), where("status", "==", "approved"), where("approvedAt", ">=", sevenDaysAgo));
-            const subSnap = await getDocs(subQuery);
-            
-            const redQuery = query(collection(db, "redemptions"), where("createdAt", ">=", sevenDaysAgo));
-            const redSnap = await getDocs(redQuery);
-
-            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-            const studyData = new Array(7).fill(0);
-            const screenData = new Array(7).fill(0);
-
-            subSnap.forEach(doc => {
-                const date = doc.data().approvedAt.toDate();
-                studyData[date.getDay()] += doc.data().earnedMinutes;
-            });
-
-            redSnap.forEach(doc => {
-                const date = doc.data().createdAt.toDate();
-                screenData[date.getDay()] += doc.data().minutes;
-            });
-
-            const ctx = document.getElementById('weeklyChart').getContext('2d');
-            if (weeklyChartInstance) weeklyChartInstance.destroy();
-            
-            weeklyChartInstance = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: days,
-                    datasets: [
-                        { label: 'Study Minutes Earned', data: studyData, backgroundColor: '#4CAF50' },
-                        { label: 'Screen Time Used', data: screenData, backgroundColor: '#FF9800' }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: { y: { beginAtZero: true } }
-                }
-            });
-        }
+        // -------------------- 🔧 REPLACE WITH YOUR GOOGLE APPS SCRIPT URL --------------------
+        window.GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyx2uv2ZP2USpOvvIwv9fR20BVa9p7qokudb3DZ-9uAeWLetkFtc1dwXDWmqAHnGMQ40Q/exec";
     </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, sans-serif;
+        }
+        body {
+            background: #f1f5f9;
+            padding: 24px 16px;
+            min-height: 100vh;
+        }
+        .app-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        /* mode toggle */
+        .mode-bar {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        .mode-btn {
+            background: white;
+            border: none;
+            font-size: 1.2rem;
+            font-weight: 600;
+            padding: 12px 32px;
+            border-radius: 60px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+            color: #1e293b;
+        }
+        .mode-btn.active {
+            background: #0f172a;
+            color: white;
+            box-shadow: 0 8px 20px rgba(15,23,42,0.2);
+        }
+        /* cards */
+        .card {
+            background: white;
+            border-radius: 36px;
+            padding: 28px 24px;
+            box-shadow: 0 20px 35px -12px rgba(0,0,0,0.08);
+            margin-bottom: 24px;
+        }
+        .kid-header {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+        .kid-selector {
+            display: flex;
+            gap: 12px;
+            background: #f8fafc;
+            padding: 6px;
+            border-radius: 60px;
+        }
+        .kid-avatar {
+            padding: 10px 28px;
+            border-radius: 40px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: 0.1s;
+            color: #334155;
+        }
+        .kid-avatar.selected {
+            background: #e2e8f0;
+            color: #0f172a;
+            box-shadow: inset 0 0 0 1px #cbd5e1;
+        }
+        .balance-card {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            border-radius: 48px;
+            padding: 16px 28px;
+            color: white;
+            text-align: center;
+        }
+        .balance-minutes {
+            font-size: 3rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+        .redeem-buttons {
+            display: flex;
+            gap: 14px;
+            justify-content: center;
+            margin: 28px 0;
+            flex-wrap: wrap;
+        }
+        .redeem-btn {
+            background: #f1f5f9;
+            border: none;
+            font-size: 1.3rem;
+            font-weight: 700;
+            padding: 12px 24px;
+            border-radius: 48px;
+            cursor: pointer;
+            transition: 0.1s;
+            color: #0f172a;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .redeem-btn:active { transform: translateY(2px); }
+        .study-form {
+            background: #f8fafc;
+            border-radius: 32px;
+            padding: 24px;
+        }
+        .study-form input, .study-form textarea {
+            width: 100%;
+            margin: 8px 0;
+            padding: 14px 18px;
+            border-radius: 40px;
+            border: 1px solid #e2e8f0;
+            background: white;
+            font-size: 0.95rem;
+        }
+        .study-form button {
+            background: #0f172a;
+            color: white;
+            border: none;
+            width: 100%;
+            padding: 14px;
+            border-radius: 40px;
+            font-weight: 600;
+            margin-top: 12px;
+            cursor: pointer;
+        }
+        .timer-alert {
+            background: #fef9c3;
+            color: #854d0e;
+            text-align: center;
+            padding: 14px;
+            border-radius: 48px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            font-size: 1rem;
+        }
+        /* parent tabs */
+        .parent-tabs {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+        }
+        .tab-btn {
+            background: #e2e8f0;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 40px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .tab-btn.active {
+            background: #0f172a;
+            color: white;
+        }
+        .submission-card {
+            background: white;
+            border-radius: 28px;
+            padding: 20px;
+            margin: 16px 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+            border: 1px solid #eef2ff;
+        }
+        .submission-thumb {
+            width: 70px;
+            height: 70px;
+            object-fit: cover;
+            border-radius: 20px;
+            background: #f1f5f9;
+        }
+        .admin-controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        button {
+            background: #e2e8f0;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 40px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .signout-btn {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+        canvas#weeklyChart {
+            max-height: 280px;
+            background: white;
+            border-radius: 28px;
+            padding: 12px;
+        }
+        input, select {
+            font-size: 0.9rem;
+        }
+        @media (max-width: 640px) {
+            .kid-header { flex-direction: column; align-items: stretch; }
+            .redeem-btn { font-size: 1rem; padding: 10px 18px; }
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <div class="mode-bar">
+        <button id="kidModeBtn" class="mode-btn active">🧑‍🎤 Kid Zone</button>
+        <button id="parentModeBtn" class="mode-btn">👩‍💻 Parent Portal</button>
+    </div>
+    <!-- KID SECTION -->
+    <div id="kidSection" class="card">
+        <div class="kid-header">
+            <div class="kid-selector" id="kidSelector">
+                <div data-child="child_umar" class="kid-avatar">🧑 Umar · 14</div>
+                <div data-child="child_muaz" class="kid-avatar">👩 Muaz · 13</div>
+            </div>
+            <div class="balance-card">
+                🎮 Screen balance<br>
+                <span id="balanceMinutes" class="balance-minutes">0</span> <span style="font-size:1rem;">min</span>
+            </div>
+        </div>
+        <div id="liveTimerDisplay" class="timer-alert">⏳ No active session</div>
+        <div class="redeem-buttons">
+            <button class="redeem-btn" data-minutes="15">⚡ 15 min</button>
+            <button class="redeem-btn" data-minutes="30">🎯 30 min</button>
+            <button class="redeem-btn" data-minutes="60">🌟 60 min</button>
+        </div>
+        <div class="study-form">
+            <h3 style="margin-bottom: 12px;">📚 Request study time + proof</h3>
+            <input type="text" id="studySubject" placeholder="Subject (e.g. Math, Science)">
+            <textarea id="studyDesc" rows="2" placeholder="What did you study?"></textarea>
+            <input type="file" id="proofFile" accept="image/*,video/*" capture="environment">
+            <button id="submitStudyBtn">✨ Submit for approval</button>
+            <div id="uploadStatus" style="margin-top: 12px; font-size:0.85rem; color:#475569;"></div>
+        </div>
+    </div>
+
+    <!-- PARENT SECTION (hidden) -->
+    <div id="parentSection" class="card" style="display:none;">
+        <div id="parentAuthPanel">
+            <h3>🔐 Parent access</h3>
+            <input type="email" id="parentEmail" placeholder="Email" style="width:100%; margin:8px 0; padding:12px; border-radius:40px; border:1px solid #e2e8f0;">
+            <input type="password" id="parentPassword" placeholder="Password" style="width:100%; margin:8px 0; padding:12px; border-radius:40px; border:1px solid #e2e8f0;">
+            <button id="parentSigninBtn" style="background:#0f172a; color:white;">Sign in</button>
+            <button id="parentSignoutBtn" class="signout-btn" style="display:none;">Sign out</button>
+            <div id="authMsg"></div>
+        </div>
+        <div id="parentDashboardContent" style="display:none;">
+            <div class="parent-tabs">
+                <button class="tab-btn active" data-tab="approvals">📋 Pending</button>
+                <button class="tab-btn" data-tab="admin">⚙️ Adjust balance</button>
+                <button class="tab-btn" data-tab="audit">📜 Audit log</button>
+                <button class="tab-btn" data-tab="chart">📊 Weekly chart</button>
+            </div>
+            <div id="approvalsTab"></div>
+            <div id="adminTab" style="display:none;">
+                <h4>➕ Manual adjustment</h4>
+                <select id="manualChildSelect"><option value="child_umar">Umar</option><option value="child_muaz">Muaz</option></select>
+                <input type="number" id="manualMinutes" placeholder="Minutes (+ add / - subtract)" value="30">
+                <button id="applyManualAdjust">Apply</button>
+                <hr style="margin:20px 0;">
+                <div id="childBalancesList"></div>
+            </div>
+            <div id="auditTab" style="display:none;"><div id="auditLogList"></div></div>
+            <div id="chartTab" style="display:none;"><canvas id="weeklyChart"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    // ---------- FIREBASE IMPORTS ----------
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, query, where, onSnapshot, orderBy, limit, runTransaction, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+    const app = initializeApp(window.FIREBASE_CONFIG);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    enableIndexedDbPersistence(db).catch(e => console.warn("offline persistence:", e));
+
+    // ---------- GLOBALS ----------
+    let currentChildId = "child_umar";
+    let currentTimerInterval = null;
+    let timerWarningTriggered = false;
+    let childBalanceUnsub = null;
+    let pendingSubmissionsUnsub = null;
+    let parentAuthenticated = false;
+    let weeklyChartInstance = null;
+
+    // Ensure children exist
+    async function ensureChildrenExist() {
+        for (const id of ["child_umar", "child_muaz"]) {
+            const ref = doc(db, "children", id);
+            const snap = await getDoc(ref);
+            if (!snap.exists()) await setDoc(ref, { name: id === "child_umar" ? "Umar" : "Muaz", balanceMinutes: 0, createdAt: new Date() });
+        }
+    }
+    ensureChildrenExist();
+
+    function subscribeChildBalance(childId) {
+        if (childBalanceUnsub) childBalanceUnsub();
+        childBalanceUnsub = onSnapshot(doc(db, "children", childId), (docSnap) => {
+            document.getElementById("balanceMinutes").innerText = docSnap.exists() ? docSnap.data().balanceMinutes : 0;
+        });
+    }
+
+    // Timer with localStorage
+    function manageActiveTimer() {
+        if (currentTimerInterval) clearInterval(currentTimerInterval);
+        const storageKey = `screen_timer_end_${currentChildId}`;
+        const timerDiv = document.getElementById("liveTimerDisplay");
+        function updateDisplay() {
+            const end = localStorage.getItem(storageKey);
+            if (!end || parseInt(end) <= Date.now()) {
+                localStorage.removeItem(storageKey);
+                timerDiv.innerHTML = "⏳ No active screen session";
+                if (currentTimerInterval) clearInterval(currentTimerInterval);
+                currentTimerInterval = null;
+                timerWarningTriggered = false;
+                return;
+            }
+            const remainingMs = parseInt(end) - Date.now();
+            const min = Math.floor(remainingMs / 60000);
+            const sec = Math.floor((remainingMs % 60000) / 1000);
+            timerDiv.innerHTML = `🎮 SCREEN TIME ACTIVE: ${min}m ${sec}s left`;
+            if (remainingMs <= 300000 && !timerWarningTriggered) {
+                timerWarningTriggered = true;
+                timerDiv.style.background = "#ffedd5";
+                timerDiv.innerHTML += " ⚠️ 5 minutes left!";
+            }
+        }
+        updateDisplay();
+        currentTimerInterval = setInterval(updateDisplay, 1000);
+    }
+
+    async function redeemMinutes(minutes) {
+        const existingEnd = localStorage.getItem(`screen_timer_end_${currentChildId}`);
+        if (existingEnd && parseInt(existingEnd) > Date.now()) return alert("⏰ You already have an active timer!");
+        const childRef = doc(db, "children", currentChildId);
+        try {
+            await runTransaction(db, async (transaction) => {
+                const snap = await transaction.get(childRef);
+                const balance = snap.data()?.balanceMinutes || 0;
+                if (balance < minutes) throw new Error(`Insufficient balance (${balance} min left)`);
+                transaction.update(childRef, { balanceMinutes: balance - minutes });
+                await transaction.set(doc(collection(db, "redemptions")), { childId: currentChildId, minutes, createdAt: new Date(), type: "redemption" });
+            });
+            localStorage.setItem(`screen_timer_end_${currentChildId}`, (Date.now() + minutes * 60000).toString());
+            timerWarningTriggered = false;
+            manageActiveTimer();
+            alert(`✅ ${minutes} minutes redeemed! Timer started.`);
+        } catch (err) { alert(err.message); }
+    }
+
+    // ----- GOOGLE DRIVE UPLOAD (via Apps Script) -----
+    async function resizeImageToBlob(file, maxWidth = 800, quality = 0.8) {
+        if (!file.type.startsWith('image/')) return file;
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (e) => {
+                const img = new Image();
+                img.src = e.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width, height = img.height;
+                    if (width > maxWidth) { height = (height * maxWidth) / width; width = maxWidth; }
+                    canvas.width = width; canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    canvas.toBlob(blob => resolve(blob), 'image/jpeg', quality);
+                };
+                img.onerror = reject;
+            };
+            reader.onerror = reject;
+        });
+    }
+
+    async function uploadToGoogleDrive(fileBlob) {
+        const scriptUrl = window.GOOGLE_SCRIPT_URL;
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                const base64 = reader.result.split(',')[1];
+                const response = await fetch(scriptUrl, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fileBase64: base64, fileName: fileBlob.name, mimeType: fileBlob.type })
+                });
+                const data = await response.json();
+                if (data.success) resolve(data.url);
+                else reject(new Error(data.error || "Upload failed"));
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(fileBlob);
+        });
+    }
+
+    async function submitStudyRequest() {
+        const subject = document.getElementById("studySubject").value.trim();
+        const description = document.getElementById("studyDesc").value.trim();
+        const fileInput = document.getElementById("proofFile");
+        const statusDiv = document.getElementById("uploadStatus");
+        if (!subject) return alert("Enter a subject");
+        if (!fileInput.files.length) return alert("Select a photo/video");
+        let file = fileInput.files[0];
+        if (file.size > 2 * 1024 * 1024) return alert("Max 2MB");
+        statusDiv.innerText = "📤 Resizing & uploading to Google Drive...";
+        try {
+            const resized = await resizeImageToBlob(file);
+            const driveUrl = await uploadToGoogleDrive(resized);
+            await addDoc(collection(db, "submissions"), {
+                childId: currentChildId, subject, description, photoURL: driveUrl, status: "pending",
+                earnedMinutes: 0, createdAt: new Date(), approvedAt: null, approvedBy: null
+            });
+            statusDiv.innerHTML = "✅ Submitted! Waiting for parent approval.";
+            document.getElementById("studySubject").value = "";
+            document.getElementById("studyDesc").value = "";
+            fileInput.value = "";
+        } catch (err) {
+            statusDiv.innerHTML = "❌ Upload error: " + err.message;
+        }
+    }
+
+    // ---------- PARENT FUNCTIONS ----------
+    async function loadPendingApprovals() {
+        if (pendingSubmissionsUnsub) pendingSubmissionsUnsub();
+        const q = query(collection(db, "submissions"), where("status", "==", "pending"), orderBy("createdAt", "desc"));
+        pendingSubmissionsUnsub = onSnapshot(q, (snap) => {
+            const container = document.getElementById("approvalsTab");
+            if (!container) return;
+            if (snap.empty) { container.innerHTML = "<p>✨ No pending submissions</p>"; return; }
+            let html = "";
+            snap.forEach(docSnap => {
+                const data = docSnap.data();
+                const id = docSnap.id;
+                html += `
+                    <div class="submission-card">
+                        <img src="${data.photoURL}" class="submission-thumb" alt="proof" onerror="this.src='https://placehold.co/80x80'">
+                        <div><strong>${data.subject}</strong><br>${data.description || ""}<br><small>👤 ${data.childId === "child_umar" ? "Umar" : "Muaz"}</small></div>
+                        <div>🎓 Earn: <input type="range" id="slider_${id}" min="5" max="60" value="20" step="5"> <span id="val_${id}">20</span> min</div>
+                        <div class="admin-controls">
+                            <button class="approveBtn" data-id="${id}" data-child="${data.childId}">✅ Approve</button>
+                            <button class="rejectBtn" data-id="${id}">❌ Reject</button>
+                        </div>
+                    </div>`;
+            });
+            container.innerHTML = html;
+            snap.forEach(docSnap => {
+                const id = docSnap.id;
+                const slider = document.getElementById(`slider_${id}`);
+                if(slider) slider.oninput = (e) => document.getElementById(`val_${id}`).innerText = e.target.value;
+                document.querySelector(`.approveBtn[data-id="${id}"]`).onclick = () => approveSubmission(id);
+                document.querySelector(`.rejectBtn[data-id="${id}"]`).onclick = () => rejectSubmission(id);
+            });
+        });
+    }
+
+    async function approveSubmission(id) {
+        const slider = document.getElementById(`slider_${id}`);
+        const earned = parseInt(slider?.value || 20);
+        const subRef = doc(db, "submissions", id);
+        const subSnap = await getDoc(subRef);
+        if (!subSnap.exists()) return;
+        const childId = subSnap.data().childId;
+        const childRef = doc(db, "children", childId);
+        await runTransaction(db, async (tr) => {
+            const child = await tr.get(childRef);
+            const newBalance = (child.data()?.balanceMinutes || 0) + earned;
+            tr.update(childRef, { balanceMinutes: newBalance });
+            tr.update(subRef, { status: "approved", earnedMinutes: earned, approvedAt: new Date(), approvedBy: auth.currentUser?.uid });
+        });
+        alert(`Approved! Added ${earned} minutes.`);
+    }
+
+    async function rejectSubmission(id) {
+        await updateDoc(doc(db, "submissions", id), { status: "rejected" });
+        alert("Rejected.");
+    }
+
+    async function manualAdjust(childId, delta) {
+        const childRef = doc(db, "children", childId);
+        await runTransaction(db, async (tr) => {
+            const snap = await tr.get(childRef);
+            const newBal = (snap.data()?.balanceMinutes || 0) + delta;
+            if (newBal < 0) throw new Error("Balance can't go negative");
+            tr.update(childRef, { balanceMinutes: newBal });
+            await tr.set(doc(collection(db, "redemptions")), { childId, minutes: delta, type: "manual_adjust", createdAt: new Date(), note: "Parent adjusted" });
+        });
+        alert(`Balance updated (${delta > 0 ? '+' : ''}${delta} min)`);
+        refreshChildBalances();
+    }
+
+    async function loadAuditLog() {
+        const submissions = await getDocs(query(collection(db, "submissions"), where("status", "in", ["approved","rejected"]), orderBy("createdAt", "desc"), limit(30)));
+        const redemptions = await getDocs(query(collection(db, "redemptions"), orderBy("createdAt", "desc"), limit(40)));
+        let items = [];
+        submissions.forEach(d => { const data = d.data(); items.push({ time: data.createdAt?.toDate(), text: `${data.childId === "child_umar" ? "Umar" : "Muaz"} | Study ${data.status} | ${data.earnedMinutes || 0} min` }); });
+        redemptions.forEach(d => { const data = d.data(); items.push({ time: data.createdAt?.toDate(), text: `${data.childId === "child_umar" ? "Umar" : "Muaz"} | ${data.type === "manual_adjust" ? "Manual" : "Redeemed"} | ${data.minutes} min` }); });
+        items.sort((a,b) => b.time - a.time);
+        document.getElementById("auditLogList").innerHTML = items.slice(0,50).map(i => `<div class="audit-item">📅 ${i.time.toLocaleString()} · ${i.text}</div>`).join("");
+    }
+
+    async function loadWeeklyChart() {
+        const weekAgo = new Date(Date.now() - 7*86400000);
+        const approved = await getDocs(query(collection(db, "submissions"), where("status", "==", "approved"), where("createdAt", ">=", weekAgo)));
+        let study = 0; approved.forEach(d => study += d.data().earnedMinutes || 0);
+        const redemptions = await getDocs(query(collection(db, "redemptions"), where("type", "==", "redemption"), where("createdAt", ">=", weekAgo)));
+        let screen = 0; redemptions.forEach(r => screen += r.data().minutes || 0);
+        const ctx = document.getElementById('weeklyChart').getContext('2d');
+        if (weeklyChartInstance) weeklyChartInstance.destroy();
+        weeklyChartInstance = new Chart(ctx, {
+            type: 'bar', data: { labels: ['Study 📚', 'Screen 🎮'], datasets: [{ label: 'Last 7 days (minutes)', data: [study, screen], backgroundColor: ['#3b82f6', '#f97316'] }] },
+            options: { responsive: true, maintainAspectRatio: true }
+        });
+    }
+
+    async function refreshChildBalances() {
+        const umar = await getDoc(doc(db,"children","child_umar"));
+        const muaz = await getDoc(doc(db,"children","child_muaz"));
+        document.getElementById("childBalancesList").innerHTML = `<p>🧑 Umar: ${umar.data()?.balanceMinutes || 0} min &nbsp; 👩 Muaz: ${muaz.data()?.balanceMinutes || 0} min</p>`;
+    }
+
+    // Helper getDocs for queries
+    async function getDocs(querySnap) { const snap = await querySnap; return snap; }
+
+    // ---------- AUTH & UI SWITCHING ----------
+    function showParentContent(show) {
+        document.getElementById("parentAuthPanel").style.display = show ? "none" : "block";
+        document.getElementById("parentDashboardContent").style.display = show ? "block" : "none";
+        if (show) { loadPendingApprovals(); refreshChildBalances(); loadAuditLog(); loadWeeklyChart(); }
+        else if (pendingSubmissionsUnsub) { pendingSubmissionsUnsub(); pendingSubmissionsUnsub = null; }
+    }
+
+    onAuthStateChanged(auth, (user) => {
+        parentAuthenticated = !!user;
+        if (parentAuthenticated && document.getElementById("parentSection").style.display !== "none") showParentContent(true);
+        else if (!parentAuthenticated && document.getElementById("parentSection").style.display !== "none") showParentContent(false);
+        document.getElementById("parentSigninBtn").style.display = parentAuthenticated ? "none" : "inline-block";
+        document.getElementById("parentSignoutBtn").style.display = parentAuthenticated ? "inline-block" : "none";
+        document.getElementById("authMsg").innerText = parentAuthenticated ? `Logged in as ${user.email}` : "";
+    });
+
+    document.getElementById("parentSigninBtn").onclick = async () => {
+        try { await signInWithEmailAndPassword(auth, document.getElementById("parentEmail").value, document.getElementById("parentPassword").value); }
+        catch(e) { alert("Login failed: " + e.message); }
+    };
+    document.getElementById("parentSignoutBtn").onclick = async () => { await signOut(auth); location.reload(); };
+
+    // Mode toggles
+    document.getElementById("kidModeBtn").onclick = () => {
+        document.getElementById("kidModeBtn").classList.add("active");
+        document.getElementById("parentModeBtn").classList.remove("active");
+        document.getElementById("kidSection").style.display = "block";
+        document.getElementById("parentSection").style.display = "none";
+        subscribeChildBalance(currentChildId);
+        manageActiveTimer();
+    };
+    document.getElementById("parentModeBtn").onclick = () => {
+        document.getElementById("parentModeBtn").classList.add("active");
+        document.getElementById("kidModeBtn").classList.remove("active");
+        document.getElementById("kidSection").style.display = "none";
+        document.getElementById("parentSection").style.display = "block";
+        if (parentAuthenticated) showParentContent(true);
+        else showParentContent(false);
+    };
+
+    // Kid UI listeners
+    document.querySelectorAll(".kid-avatar").forEach(el => {
+        el.onclick = () => {
+            document.querySelectorAll(".kid-avatar").forEach(c=>c.classList.remove("selected"));
+            el.classList.add("selected");
+            currentChildId = el.getAttribute("data-child");
+            subscribeChildBalance(currentChildId);
+            manageActiveTimer();
+        };
+    });
+    document.querySelectorAll(".redeem-btn").forEach(btn => btn.onclick = () => redeemMinutes(parseInt(btn.getAttribute("data-minutes"))));
+    document.getElementById("submitStudyBtn").onclick = submitStudyRequest;
+    document.querySelectorAll(".tab-btn").forEach(btn => {
+        btn.onclick = () => {
+            document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+            btn.classList.add("active");
+            const tab = btn.getAttribute("data-tab");
+            document.getElementById("approvalsTab").style.display = tab === "approvals" ? "block" : "none";
+            document.getElementById("adminTab").style.display = tab === "admin" ? "block" : "none";
+            document.getElementById("auditTab").style.display = tab === "audit" ? "block" : "none";
+            document.getElementById("chartTab").style.display = tab === "chart" ? "block" : "none";
+            if (tab === "audit") loadAuditLog();
+            if (tab === "chart") loadWeeklyChart();
+            if (tab === "admin") refreshChildBalances();
+        };
+    });
+    document.getElementById("applyManualAdjust").onclick = () => {
+        const child = document.getElementById("manualChildSelect").value;
+        const mins = parseInt(document.getElementById("manualMinutes").value);
+        if (!isNaN(mins)) manualAdjust(child, mins);
+    };
+    // init kid mode default
+    document.querySelector(".kid-avatar").classList.add("selected");
+    subscribeChildBalance(currentChildId);
+    manageActiveTimer();
+</script>
 </body>
 </html>

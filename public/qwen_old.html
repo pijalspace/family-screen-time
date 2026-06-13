@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Screen-Time Manager</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --primary: #4CAF50; --secondary: #FF9800; --danger: #F44336; --bg: #F0F4F8; --card: #FFFFFF; --text: #333333; }
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; background: var(--bg); color: var(--text); padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .card { background: var(--card); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h1, h2, h3 { margin-top: 0; }
+        .btn { padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; margin: 5px; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-secondary { background: var(--secondary); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .mode-toggle { text-align: center; margin-bottom: 20px; }
+        .hidden { display: none !important; }
+        .profile-select { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+        .profile-btn { font-size: 20px; padding: 15px 30px; border: 3px solid transparent; }
+        .profile-btn.active { border-color: var(--primary); background: #E8F5E9; }
+        .balance-display { font-size: 24px; text-align: center; font-weight: bold; color: var(--primary); margin: 20px 0; }
+        .timer-display { font-size: 32px; text-align: center; color: var(--secondary); font-weight: bold; margin: 20px 0; }
+        .timer-warning { color: var(--danger); animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        .redeem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        input, textarea, select { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+        .submission-item { border: 1px solid #eee; border-radius: 8px; padding: 15px; margin-bottom: 15px; display: flex; gap: 15px; align-items: flex-start; }
+        .submission-item img { width: 100px; height: 100px; object-fit: cover; border-radius: 6px; background: #eee; }
+        .submission-details { flex: 1; }
+        .slider-container { margin: 10px 0; }
+        .slider-container label { display: block; font-weight: bold; margin-bottom: 5px; }
+        .chart-container { position: relative; height: 300px; width: 100%; }
+        .admin-controls { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="mode-toggle">
+            <button class="btn btn-primary" onclick="setMode('kid')">👦 Kid Mode</button>
+            <button class="btn btn-secondary" onclick="setMode('parent')">🔒 Parent Mode</button>
+        </div>
+
+        <!-- KID MODE -->
+        <div id="kidMode" class="hidden">
+            <div class="card">
+                <h2>👋 Who is using the device?</h2>
+                <div class="profile-select">
+                    <button class="btn profile-btn" onclick="selectChild('umar')">👦 Umar (14)</button>
+                    <button class="btn profile-btn" onclick="selectChild('muaz')">👦 Muaz (13)</button>
+                </div>
+            </div>
+
+            <div id="kidDashboard" class="hidden">
+                <div class="card">
+                    <h2>⏱️ Screen Time Balance</h2>
+                    <div class="balance-display" id="balanceDisplay">Loading...</div>
+                    <div id="activeTimer" class="hidden">
+                        <div class="timer-display" id="timerDisplay">00:00</div>
+                        <p style="text-align:center; color: var(--danger);" id="timerWarning" class="hidden">⚠️ 5 minutes remaining!</p>
+                        <button class="btn btn-danger" style="width:100%" onclick="stopTimer()">Stop Timer Early</button>
+                    </div>
+                    <div id="redeemSection">
+                        <h3>Redeem Minutes</h3>
+                        <div class="redeem-grid">
+                            <button class="btn btn-secondary" onclick="redeemTime(15)">15 min</button>
+                            <button class="btn btn-secondary" onclick="redeemTime(30)">30 min</button>
+                            <button class="btn btn-secondary" onclick="redeemTime(60)">60 min</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>📚 Submit Study Request</h2>
+                    <form id="studyForm" onsubmit="handleStudySubmit(event)">
+                        <input type="text" id="subject" placeholder="Subject (e.g., Math)" required>
+                        <textarea id="description" rows="3" placeholder="What did you study?" required></textarea>
+                        <label>📸 Proof (Photo):</label>
+                        <input type="file" id="proofFile" accept="image/*" capture="environment" required>
+                        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:10px;" id="submitBtn">Submit for Approval</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- PARENT MODE -->
+        <div id="parentMode" class="hidden">
+            <div id="parentAuth" class="card auth-form">
+                <h2>🔐 Parent Login</h2>
+                <input type="email" id="parentEmail" placeholder="Email">
+                <input type="password" id="parentPassword" placeholder="Password">
+                <button class="btn btn-primary" style="width:100%" onclick="parentLogin()">Login</button>
+            </div>
+
+            <div id="parentDashboard" class="hidden">
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2>👨‍👩‍👦 Parent Dashboard</h2>
+                        <button class="btn btn-danger" onclick="parentLogout()">Logout</button>
+                    </div>
+                    <button class="btn btn-secondary" onclick="initializeKids()">⚙️ Initialize Kids (Run Once)</button>
+                </div>
+
+                <div class="card">
+                    <h3>⏳ Pending Approvals</h3>
+                    <div id="pendingList">Loading...</div>
+                </div>
+
+                <div class="card">
+                    <h3>📊 Weekly Activity (Last 7 Days)</h3>
+                    <div class="chart-container">
+                        <canvas id="weeklyChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>🛠️ Admin: Adjust Minutes</h3>
+                    <div class="admin-controls">
+                        <select id="adminChildSelect">
+                            <option value="umar">Umar</option>
+                            <option value="muaz">Muaz</option>
+                        </select>
+                        <input type="number" id="adminMinutes" placeholder="Minutes (+ or -)" style="width:150px">
+                        <button class="btn btn-primary" onclick="adminAdjustMinutes()">Apply</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, addDoc, updateDoc, onSnapshot, query, where, orderBy, getDocs, increment, serverTimestamp, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+        // ==========================================
+        // 🔥 REPLACE WITH YOUR FIREBASE CONFIG
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyBiVBIr7TSRmKbtysUXe34fB3xu1gA8EVM",
+            authDomain: "family-screen-time-8807.firebaseapp.com",
+            projectId: "family-screen-time-8807",
+            storageBucket: "family-screen-time-8807.firebasestorage.app", // Can leave this, we just won't use the Storage SDK
+            messagingSenderId: "239195020999",
+            appId: "1:239195020999:web:b38a95bbbd81fd309b28e2"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        enableIndexedDbPersistence(db).catch((err) => {
+            if (err.code == 'failed-precondition') console.log('Persistence error: multiple tabs');
+            else if (err.code == 'unimplemented') console.log('Persistence not supported');
+        });
+
+        let currentChild = null;
+        let timerInterval = null;
+        let weeklyChartInstance = null;
+
+        window.setMode = (mode) => {
+            document.getElementById('kidMode').classList.toggle('hidden', mode !== 'kid');
+            document.getElementById('parentMode').classList.toggle('hidden', mode !== 'parent');
+            if (mode === 'parent') checkParentAuth();
+        };
+
+        window.selectChild = (childId) => {
+            currentChild = childId;
+            document.querySelectorAll('.profile-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('kidDashboard').classList.remove('hidden');
+            loadChildData(childId);
+            checkActiveTimer();
+        };
+
+        function loadChildData(childId) {
+            onSnapshot(doc(db, "children", childId), (doc) => {
+                if (doc.exists()) {
+                    document.getElementById('balanceDisplay').innerText = `${doc.data().balanceMinutes} minutes available`;
+                } else {
+                    document.getElementById('balanceDisplay').innerText = "Profile not initialized. Ask parent to run 'Initialize Kids'.";
+                }
+            });
+        }
+
+        // 🌟 NEW: Resize and convert to Base64 (No Storage needed!)
+        async function imageToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+                        const maxWidth = 800; // Resize to max 800px width
+                        if (width > maxWidth) {
+                            height = Math.round((height * maxWidth) / width);
+                            width = maxWidth;
+                        }
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        // Compress to JPEG at 70% quality. 
+                        // Result is typically ~150-250KB, well under Firestore's 1MB limit.
+                        const base64String = canvas.toDataURL('image/jpeg', 0.7);
+                        resolve(base64String);
+                    };
+                    img.onerror = reject;
+                    img.src = e.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        window.handleStudySubmit = async (e) => {
+            e.preventDefault();
+            if (!currentChild) return alert("Select a profile first!");
+            
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.innerText = "Processing...";
+
+            try {
+                const fileInput = document.getElementById('proofFile');
+                const photoBase64 = await imageToBase64(fileInput.files[0]);
+                
+                // Safety check: Firestore max document size is 1 MiB (1,048,576 bytes)
+                // Base64 string length * 0.75 approximates byte size.
+                const approxSizeBytes = photoBase64.length * 0.75;
+                if (approxSizeBytes > 900000) {
+                    throw new Error("Image is still too large. Please choose a smaller photo.");
+                }
+
+                await addDoc(collection(db, "submissions"), {
+                    childId: currentChild,
+                    subject: document.getElementById('subject').value,
+                    description: document.getElementById('description').value,
+                    photoBase64: photoBase64, // 🌟 Saved directly in Firestore!
+                    status: 'pending',
+                    earnedMinutes: 0,
+                    createdAt: serverTimestamp()
+                });
+
+                alert("✅ Study request submitted!");
+                document.getElementById('studyForm').reset();
+            } catch (error) {
+                console.error(error);
+                alert("Error: " + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Submit for Approval";
+            }
+        };
+
+        window.redeemTime = async (minutes) => {
+            if (!currentChild) return;
+            const childRef = doc(db, "children", currentChild);
+            try {
+                await addDoc(collection(db, "redemptions"), {
+                    childId: currentChild,
+                    minutes: minutes,
+                    startTime: Date.now(),
+                    endTime: Date.now() + (minutes * 60000),
+                    completed: false,
+                    createdAt: serverTimestamp()
+                });
+                await updateDoc(childRef, { balanceMinutes: increment(-minutes) });
+                startTimer(minutes);
+                alert(`🎉 Enjoy your ${minutes} minutes!`);
+            } catch (error) {
+                alert("Not enough minutes or error: " + error.message);
+            }
+        };
+
+        function startTimer(minutes) {
+            const endTime = Date.now() + (minutes * 60000);
+            localStorage.setItem('activeTimer', JSON.stringify({ endTime, childId: currentChild }));
+            checkActiveTimer();
+        }
+
+        function checkActiveTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            const timerData = JSON.parse(localStorage.getItem('activeTimer'));
+            
+            if (!timerData || timerData.childId !== currentChild) {
+                document.getElementById('activeTimer').classList.add('hidden');
+                document.getElementById('redeemSection').classList.remove('hidden');
+                return;
+            }
+
+            document.getElementById('activeTimer').classList.remove('hidden');
+            document.getElementById('redeemSection').classList.add('hidden');
+
+            timerInterval = setInterval(() => {
+                const remaining = timerData.endTime - Date.now();
+                if (remaining <= 0) {
+                    clearInterval(timerInterval);
+                    localStorage.removeItem('activeTimer');
+                    document.getElementById('timerDisplay').innerText = "00:00";
+                    document.getElementById('timerWarning').classList.add('hidden');
+                    alert("⏰ Time's up! Screen time is over.");
+                    document.getElementById('activeTimer').classList.add('hidden');
+                    document.getElementById('redeemSection').classList.remove('hidden');
+                    return;
+                }
+
+                const mins = Math.floor(remaining / 60000);
+                const secs = Math.floor((remaining % 60000) / 1000);
+                document.getElementById('timerDisplay').innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+
+                if (remaining <= 5 * 60 * 1000) {
+                    document.getElementById('timerWarning').classList.remove('hidden');
+                }
+            }, 1000);
+        }
+
+        window.stopTimer = () => {
+            if (confirm("Stop timer early? Remaining minutes will NOT be refunded.")) {
+                clearInterval(timerInterval);
+                localStorage.removeItem('activeTimer');
+                document.getElementById('activeTimer').classList.add('hidden');
+                document.getElementById('redeemSection').classList.remove('hidden');
+            }
+        };
+
+        checkActiveTimer();
+
+        // ================= PARENT FUNCTIONS =================
+        window.parentLogin = async () => {
+            const email = document.getElementById('parentEmail').value;
+            const password = document.getElementById('parentPassword').value;
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+            } catch (error) {
+                alert("Login failed: " + error.message);
+            }
+        };
+
+        window.parentLogout = () => signOut(auth);
+
+        function checkParentAuth() {
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    document.getElementById('parentAuth').classList.add('hidden');
+                    document.getElementById('parentDashboard').classList.remove('hidden');
+                    loadParentDashboard();
+                } else {
+                    document.getElementById('parentAuth').classList.remove('hidden');
+                    document.getElementById('parentDashboard').classList.add('hidden');
+                }
+            });
+        }
+
+        window.initializeKids = async () => {
+            try {
+                await setDoc(doc(db, "children", "umar"), { name: "Umar", balanceMinutes: 0, createdAt: serverTimestamp() }, { merge: true });
+                await setDoc(doc(db, "children", "muaz"), { name: "Muaz", balanceMinutes: 0, createdAt: serverTimestamp() }, { merge: true });
+                alert("✅ Kids initialized!");
+            } catch (e) {
+                alert("Error: " + e.message);
+            }
+        };
+
+    function loadParentDashboard() {
+        // Real-time pending submissions
+        const q = query(
+            collection(db, "submissions"), 
+            where("status", "==", "pending"), 
+            orderBy("createdAt", "desc")
+        );
+    
+        onSnapshot(q, (snapshot) => {
+            const list = document.getElementById('pendingList');
+            list.innerHTML = "";
+        
+            if (snapshot.empty) {
+                list.innerHTML = "<p>No pending requests. Great job, kids! 🎉</p>";
+                return;
+            }
+        
+            snapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                const div = document.createElement('div');
+                div.className = 'submission-item';
+                div.innerHTML = `
+                    <img src="${data.photoBase64}" alt="Proof" onerror="this.style.display='none'">
+                    <div class="submission-details">
+                        <strong>${data.childId.toUpperCase()}</strong> - ${data.subject}<br>
+                        <small>${data.description}</small><br>
+                        <div class="slider-container">
+                            <label>Minutes to award: <span id="val-${docSnap.id}">20</span></label>
+                            <input type="range" min="5" max="60" value="20" style="width:100%" 
+                                oninput="document.getElementById('val-${docSnap.id}').innerText = this.value"
+                                id="slider-${docSnap.id}">
+                        </div>
+                        <button class="btn btn-primary" onclick="approveSubmission('${docSnap.id}', '${data.childId}')">Approve</button>
+                        <button class="btn btn-danger" onclick="rejectSubmission('${docSnap.id}')">Reject</button>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }, (error) => {
+            console.error("Error loading submissions:", error);
+        });
+    
+        loadWeeklyChart();
+    }
+    
+        window.approveSubmission = async (subId, childId) => {
+            const minutes = parseInt(document.getElementById(`slider-${subId}`).value);
+            try {
+                console.log("Approving submission:", subId, "for", minutes, "minutes");
+
+                await updateDoc(doc(db, "submissions", subId), {
+                    status: 'approved',
+                    earnedMinutes: minutes,
+                    approvedAt: serverTimestamp()
+                });
+
+                await updateDoc(doc(db, "children", childId), {
+                    balanceMinutes: increment(minutes)
+                });
+
+                console.log("✅ Approved successfully!");
+            } catch (e) {
+                alert("Error approving: " + e.message);
+            }
+        };
+
+        window.rejectSubmission = async (subId) => {
+            try {
+                console.log("Rejecting submission:", subId);
+
+                await updateDoc(doc(db, "submissions", subId), {
+                    status: 'rejected',
+                    approvedAt: serverTimestamp()
+                });
+
+                console.log("✅ Rejected successfully!");
+            } catch (e) {
+                console.error("Error rejecting:", e);
+                alert("Error rejecting: " + e.message);
+            }
+        };
+
+        window.adminAdjustMinutes = async () => {
+            const childId = document.getElementById('adminChildSelect').value;
+            const mins = parseInt(document.getElementById('adminMinutes').value);
+            if (!mins) return;
+            try {
+                await updateDoc(doc(db, "children", childId), {
+                    balanceMinutes: increment(mins)
+                });
+                alert(`✅ Adjusted ${childId}'s balance by ${mins} minutes.`);
+                document.getElementById('adminMinutes').value = '';
+            } catch (e) {
+                alert("Error: " + e.message);
+            }
+        };
+
+        async function loadWeeklyChart() {
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+            const subQuery = query(collection(db, "submissions"), where("status", "==", "approved"), where("approvedAt", ">=", sevenDaysAgo));
+            const subSnap = await getDocs(subQuery);
+            
+            const redQuery = query(collection(db, "redemptions"), where("createdAt", ">=", sevenDaysAgo));
+            const redSnap = await getDocs(redQuery);
+
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const studyData = new Array(7).fill(0);
+            const screenData = new Array(7).fill(0);
+
+            subSnap.forEach(doc => {
+                const date = doc.data().approvedAt.toDate();
+                studyData[date.getDay()] += doc.data().earnedMinutes;
+            });
+
+            redSnap.forEach(doc => {
+                const date = doc.data().createdAt.toDate();
+                screenData[date.getDay()] += doc.data().minutes;
+            });
+
+            const ctx = document.getElementById('weeklyChart').getContext('2d');
+            if (weeklyChartInstance) weeklyChartInstance.destroy();
+            
+            weeklyChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: days,
+                    datasets: [
+                        { label: 'Study Minutes Earned', data: studyData, backgroundColor: '#4CAF50' },
+                        { label: 'Screen Time Used', data: screenData, backgroundColor: '#FF9800' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
