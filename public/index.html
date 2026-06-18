@@ -795,4 +795,64 @@
     });
 
     document.getElementById("parentSigninBtn").onclick = async () => {
-        try { await signInWithEmail
+        try { await signInWithEmailAndPassword(auth, document.getElementById("parentEmail").value, document.getElementById("parentPassword").value); }
+        catch(e) { alert("Login failed: " + e.message); }
+    };
+    document.getElementById("parentSignoutBtn").onclick = async () => { await signOut(auth); location.reload(); };
+
+    // Mode toggles
+    document.getElementById("kidModeBtn").onclick = () => {
+        document.getElementById("kidModeBtn").classList.add("active");
+        document.getElementById("parentModeBtn").classList.remove("active");
+        document.getElementById("kidSection").style.display = "block";
+        document.getElementById("parentSection").style.display = "none";
+        subscribeChildBalance(currentChildId);
+        manageActiveTimer();
+    };
+    document.getElementById("parentModeBtn").onclick = () => {
+        document.getElementById("parentModeBtn").classList.add("active");
+        document.getElementById("kidModeBtn").classList.remove("active");
+        document.getElementById("kidSection").style.display = "none";
+        document.getElementById("parentSection").style.display = "block";
+        if (parentAuthenticated) showParentContent(true);
+        else showParentContent(false);
+    };
+
+    // Kid UI listeners
+    document.querySelectorAll(".kid-avatar").forEach(el => {
+        el.onclick = () => {
+            document.querySelectorAll(".kid-avatar").forEach(c=>c.classList.remove("selected"));
+            el.classList.add("selected");
+            currentChildId = el.getAttribute("data-child");
+            subscribeChildBalance(currentChildId);
+            manageActiveTimer();
+        };
+    });
+    document.querySelectorAll(".redeem-btn").forEach(btn => btn.onclick = () => redeemMinutes(parseInt(btn.getAttribute("data-minutes"))));
+    document.getElementById("submitStudyBtn").onclick = submitStudyRequest;
+    document.querySelectorAll(".tab-btn").forEach(btn => {
+        btn.onclick = () => {
+            document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+            btn.classList.add("active");
+            const tab = btn.getAttribute("data-tab");
+            document.getElementById("approvalsTab").style.display = tab === "approvals" ? "block" : "none";
+            document.getElementById("adminTab").style.display = tab === "admin" ? "block" : "none";
+            document.getElementById("auditTab").style.display = tab === "audit" ? "block" : "none";
+            document.getElementById("chartTab").style.display = tab === "chart" ? "block" : "none";
+            if (tab === "audit") loadAuditLog();
+            if (tab === "chart") loadWeeklyChart();
+            if (tab === "admin") refreshChildBalances();
+        };
+    });
+    document.getElementById("applyManualAdjust").onclick = () => {
+        const child = document.getElementById("manualChildSelect").value;
+        const mins = parseInt(document.getElementById("manualMinutes").value);
+        if (!isNaN(mins)) manualAdjust(child, mins);
+    };
+    // init kid mode default
+    document.querySelector(".kid-avatar").classList.add("selected");
+    subscribeChildBalance(currentChildId);
+    manageActiveTimer();
+</script>
+</body>
+</html>
