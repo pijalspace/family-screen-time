@@ -141,6 +141,9 @@
             background: white;
             font-size: 0.95rem;
         }
+        .study-form input[type="datetime-local"] {
+            padding: 12px 18px;
+        }
         .study-form button {
             background: #0f172a;
             color: white;
@@ -204,6 +207,18 @@
             border-radius: 20px;
             background: #f1f5f9;
             cursor: pointer;
+        }
+        .submission-info {
+            flex: 1;
+            min-width: 150px;
+        }
+        .submission-info strong {
+            display: block;
+            font-size: 1.05rem;
+        }
+        .submission-info .meta {
+            font-size: 0.85rem;
+            color: #64748b;
         }
         .admin-controls {
             display: flex;
@@ -355,6 +370,8 @@
             <h3 style="margin-bottom: 12px;">📚 Request study time + proof</h3>
             <input type="text" id="studySubject" placeholder="Subject (e.g. Math, Science)">
             <textarea id="studyDesc" rows="2" placeholder="What did you study?"></textarea>
+            <!-- NEW: Date & Time field -->
+            <input type="datetime-local" id="taskDatetime">
             <input type="file" id="proofFile" accept="image/*,video/*" capture="environment">
             <button id="submitStudyBtn">✨ Submit for approval</button>
             <div id="uploadStatus" style="margin-top: 12px; font-size:0.85rem; color:#475569;"></div>
@@ -434,7 +451,6 @@
     let pendingSubmissionsUnsub = null;
     let parentAuthenticated = false;
     let weeklyChartInstance = null;
-    let currentZoomImage = null;
     let currentZoomScale = 1;
 
     // Ensure children exist
@@ -446,6 +462,20 @@
         }
     }
     ensureChildrenExist();
+
+    // ---------- SET DEFAULT DATETIME TO NOW ----------
+    function setDefaultDatetime() {
+        const now = new Date();
+        // Format: YYYY-MM-DDTHH:mm
+        const year = now.getFullYear();
+        const month = String(now.getMonth()+1).padStart(2,'0');
+        const day = String(now.getDate()).padStart(2,'0');
+        const hours = String(now.getHours()).padStart(2,'0');
+        const minutes = String(now.getMinutes()).padStart(2,'0');
+        const datetime = `${year}-${month}-${day}T${hours}:${minutes}`;
+        document.getElementById('taskDatetime').value = datetime;
+    }
+    setDefaultDatetime();
 
     function subscribeChildBalance(childId) {
         if (childBalanceUnsub) childBalanceUnsub();
@@ -545,27 +575,45 @@
         return data.secure_url;
     }
 
+    // ---------- SUBMIT STUDY REQUEST (with datetime) ----------
     async function submitStudyRequest() {
         const subject = document.getElementById("studySubject").value.trim();
         const description = document.getElementById("studyDesc").value.trim();
+        const datetime = document.getElementById("taskDatetime").value;
         const fileInput = document.getElementById("proofFile");
         const statusDiv = document.getElementById("uploadStatus");
+
         if (!subject) return alert("Enter a subject");
+        if (!datetime) return alert("Please select date and time");
         if (!fileInput.files.length) return alert("Select a photo/video");
         let file = fileInput.files[0];
         if (file.size > 10 * 1024 * 1024) return alert("Max 10MB");
+
         statusDiv.innerText = "📤 Resizing & uploading to Cloudinary...";
         try {
             const resized = await resizeImageToBlob(file);
             const imageUrl = await uploadToCloudinary(resized);
+
+            // NEW: store taskDatetime as string
             await addDoc(collection(db, "submissions"), {
-                childId: currentChildId, subject, description, photoURL: imageUrl, status: "pending",
-                earnedMinutes: 0, createdAt: new Date(), approvedAt: null, approvedBy: null
+                childId: currentChildId,
+                subject,
+                description,
+                photoURL: imageUrl,
+                taskDatetime: datetime,   // <-- new field
+                status: "pending",
+                earnedMinutes: 0,
+                createdAt: new Date(),
+                approvedAt: null,
+                approvedBy: null
             });
+
             statusDiv.innerHTML = "✅ Submitted! Waiting for parent approval.";
             document.getElementById("studySubject").value = "";
             document.getElementById("studyDesc").value = "";
+            document.getElementById("taskDatetime").value = ""; // clear, then reset to now later
             fileInput.value = "";
+            setDefaultDatetime(); // set again for next submission
         } catch (err) {
             statusDiv.innerHTML = "❌ Upload error: " + err.message;
         }
@@ -626,10 +674,28 @@
             snap.forEach(docSnap => {
                 const data = docSnap.data();
                 const id = docSnap.id;
+                // Format datetime for display
+                let datetimeDisplay = "No date set";
+                if (data.taskDatetime) {
+                    try {
+                        const d = new Date(data.taskDatetime);
+                        datetimeDisplay = d.toLocaleString('en-US', { 
+                            weekday: 'short', 
+                            month: 'short', 
+                            day: 'numeric', 
+                            hour: '2-digit', 
+                            minute: '2-digit'
+                        });
+                    } catch(e) { datetimeDisplay = data.taskDatetime; }
+                }
                 html += `
                     <div class="submission-card">
                         <img src="${data.photoURL}" class="submission-thumb" alt="proof" onerror="this.src='https://placehold.co/80x80'" onclick="openZoom('${data.photoURL}')">
-                        <div><strong>${data.subject}</strong><br>${data.description || ""}<br><small>👤 ${data.childId === "child_umar" ? "Umar" : "Muaz"}</small></div>
+                        <div class="submission-info">
+                            <strong>${data.subject}</strong>
+                            <div class="meta">${data.description || ""}</div>
+                            <div class="meta">👤 ${data.childId === "child_umar" ? "Umar" : "Muaz"} · 📅 ${datetimeDisplay}</div>
+                        </div>
                         <div>🎓 Earn: <input type="range" id="slider_${id}" min="5" max="60" value="20" step="5"> <span id="val_${id}">20</span> min</div>
                         <div class="admin-controls">
                             <button class="approveBtn" data-id="${id}" data-child="${data.childId}">✅ Approve</button>
