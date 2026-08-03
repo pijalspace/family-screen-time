@@ -66,6 +66,27 @@
         .video-title { padding: 12px 16px; font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .no-videos { text-align: center; padding: 30px; color: #94a3b8; }
 
+        /* ----- History Section (Kid + Parent) ----- */
+        .history-section { margin-top: 30px; }
+        .history-list { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+        .history-item { background: #f8fafc; border-radius: 20px; padding: 16px 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; border: 1px solid #e2e8f0; }
+        .history-item .h-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 14px; background: #e2e8f0; cursor: pointer; flex-shrink: 0; }
+        .history-item .h-info { flex: 1; min-width: 140px; }
+        .history-item .h-info strong { font-size: 0.95rem; }
+        .history-item .h-info .meta { font-size: 0.82rem; color: #64748b; }
+        .history-badge { font-size: 0.78rem; font-weight: 700; padding: 4px 14px; border-radius: 40px; white-space: nowrap; }
+        .badge-pending { background: #fef9c3; color: #854d0e; }
+        .badge-approved { background: #dcfce7; color: #166534; }
+        .badge-rejected { background: #fee2e2; color: #991b1b; }
+        .badge-redeemed { background: #e0e7ff; color: #3730a3; }
+        .badge-manual { background: #f0fdf4; color: #15803d; }
+        .history-empty { text-align: center; padding: 30px; color: #94a3b8; }
+        .history-filter { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+        .filter-btn { background: #e2e8f0; border: none; padding: 6px 18px; border-radius: 40px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: 0.15s; color: #334155; }
+        .filter-btn.active { background: #0f172a; color: white; }
+        .audit-item { background: #f8fafc; border-radius: 16px; padding: 12px 18px; margin: 6px 0; font-size: 0.88rem; border: 1px solid #e2e8f0; }
+        .audit-item .audit-reason { display: block; margin-top: 4px; font-size: 0.82rem; color: #64748b; font-style: italic; }
+
         /* ----- Video Play Modal ----- */
         .video-modal { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); align-items: center; justify-content: center; }
         .video-modal.active { display: flex; }
@@ -131,11 +152,26 @@
             <div id="uploadStatus" style="margin-top: 12px; font-size:0.85rem; color:#475569;"></div>
         </div>
 
-        <!-- NEW: Approved Videos Section -->
+        <!-- Approved Videos Section -->
         <div class="video-section">
             <h3>📺 Approved Videos</h3>
             <div id="videoGrid" class="video-grid">
                 <!-- Videos loaded dynamically -->
+            </div>
+        </div>
+
+        <!-- Kid History Section -->
+        <div class="history-section">
+            <h3>📜 My History</h3>
+            <div class="history-filter">
+                <button class="filter-btn active" data-kid-filter="all">All</button>
+                <button class="filter-btn" data-kid-filter="pending">Pending</button>
+                <button class="filter-btn" data-kid-filter="approved">Approved</button>
+                <button class="filter-btn" data-kid-filter="rejected">Rejected</button>
+                <button class="filter-btn" data-kid-filter="redemptions">Redemptions</button>
+            </div>
+            <div id="kidHistoryList" class="history-list">
+                <div class="history-empty">Loading history...</div>
             </div>
         </div>
     </div>
@@ -153,16 +189,28 @@
         <div id="parentDashboardContent" style="display:none;">
             <div class="parent-tabs">
                 <button class="tab-btn active" data-tab="approvals">📋 Pending</button>
+                <button class="tab-btn" data-tab="history">📜 History</button>
                 <button class="tab-btn" data-tab="admin">⚙️ Adjust balance</button>
                 <button class="tab-btn" data-tab="audit">📜 Audit log</button>
                 <button class="tab-btn" data-tab="chart">📊 Weekly chart</button>
-                <button class="tab-btn" data-tab="videos">🎬 Videos</button> <!-- NEW -->
+                <button class="tab-btn" data-tab="videos">🎬 Videos</button>
             </div>
             <div id="approvalsTab"></div>
+            <div id="historyTab" style="display:none;">
+                <div class="history-filter">
+                    <button class="filter-btn active" data-parent-filter="all">All</button>
+                    <button class="filter-btn" data-parent-filter="child_umar">Umar</button>
+                    <button class="filter-btn" data-parent-filter="child_muaz">Muaz</button>
+                </div>
+                <div id="parentHistoryList" class="history-list">
+                    <div class="history-empty">Loading history...</div>
+                </div>
+            </div>
             <div id="adminTab" style="display:none;">
                 <h4>➕ Manual adjustment</h4>
                 <select id="manualChildSelect"><option value="child_umar">Umar</option><option value="child_muaz">Muaz</option></select>
                 <input type="number" id="manualMinutes" placeholder="Minutes (+ add / - subtract)" value="30">
+                <input type="text" id="manualReason" placeholder="Reason (e.g. Extra chores, Bonus, Misbehavior)" style="width:100%; margin:8px 0; padding:12px 18px; border-radius:40px; border:1px solid #e2e8f0; font-size:0.9rem;">
                 <button id="applyManualAdjust">Apply</button>
                 <hr style="margin:20px 0;">
                 <div id="childBalancesList"></div>
@@ -236,6 +284,9 @@
     let weeklyChartInstance = null;
     let currentZoomScale = 1;
     let videosUnsub = null;  // for live video list
+    let kidHistoryUnsub = null;
+    let kidRedemptionsUnsub = null;
+    let kidHistoryFilter = "all";
 
     // Ensure children exist
     async function ensureChildrenExist() {
@@ -623,15 +674,17 @@
     }
 
     async function manualAdjust(childId, delta) {
+        const reason = document.getElementById("manualReason")?.value.trim() || "No reason provided";
         const childRef = doc(db, "children", childId);
         await runTransaction(db, async (tr) => {
             const snap = await tr.get(childRef);
             const newBal = (snap.data()?.balanceMinutes || 0) + delta;
             if (newBal < 0) throw new Error("Balance can't go negative");
             tr.update(childRef, { balanceMinutes: newBal });
-            await tr.set(doc(collection(db, "redemptions")), { childId, minutes: delta, type: "manual_adjust", createdAt: new Date(), note: "Parent adjusted" });
+            await tr.set(doc(collection(db, "redemptions")), { childId, minutes: delta, type: "manual_adjust", createdAt: new Date(), note: "Parent adjusted", reason: reason });
         });
-        alert(`Balance updated (${delta > 0 ? '+' : ''}${delta} min)`);
+        document.getElementById("manualReason").value = "";
+        alert(`Balance updated (${delta > 0 ? '+' : ''}${delta} min)\nReason: ${reason}`);
         refreshChildBalances();
     }
 
@@ -658,14 +711,16 @@
             const data = doc.data();
             items.push({
                 time: data.createdAt?.toDate(),
-                text: `${data.childId === "child_umar" ? "Umar" : "Muaz"} | Study ${data.status} | ${data.earnedMinutes || 0} min`
+                text: `${data.childId === "child_umar" ? "Umar" : "Muaz"} | Study ${data.status} | ${data.earnedMinutes || 0} min`,
+                reason: data.reason || null
             });
         });
         redemptionsSnap.forEach(doc => {
             const data = doc.data();
             items.push({
                 time: data.createdAt?.toDate(),
-                text: `${data.childId === "child_umar" ? "Umar" : "Muaz"} | ${data.type === "manual_adjust" ? "Manual" : "Redeemed"} | ${data.minutes} min`
+                text: `${data.childId === "child_umar" ? "Umar" : "Muaz"} | ${data.type === "manual_adjust" ? "Manual" : "Redeemed"} | ${data.minutes} min`,
+                reason: data.reason || null
             });
         });
         
@@ -673,9 +728,115 @@
         const container = document.getElementById("auditLogList");
         if (container) {
             container.innerHTML = items.slice(0, 50).map(i => 
-                `<div class="audit-item">📅 ${i.time.toLocaleString()} · ${i.text}</div>`
+                `<div class="audit-item">📅 ${i.time ? i.time.toLocaleString() : ""} · ${i.text}${i.reason ? `<span class="audit-reason">Reason: ${i.reason}</span>` : ""}</div>`
             ).join("");
         }
+    }
+
+    // ---------- KID HISTORY ----------
+    function loadKidHistory() {
+        if (kidHistoryUnsub) kidHistoryUnsub();
+        if (kidRedemptionsUnsub) kidRedemptionsUnsub();
+        const subQ = query(collection(db, "submissions"), where("childId", "==", currentChildId), orderBy("createdAt", "desc"), limit(50));
+        const redQ = query(collection(db, "redemptions"), where("childId", "==", currentChildId), orderBy("createdAt", "desc"), limit(50));
+        let submissions = [];
+        let redemptions = [];
+
+        function renderKidHistory() {
+            let items = [];
+            submissions.forEach(s => items.push({ ...s, sortTime: s.time, category: "submission" }));
+            redemptions.forEach(r => items.push({ ...r, sortTime: r.time, category: "redemption" }));
+            items.sort((a, b) => b.sortTime - a.sortTime);
+
+            const filtered = items.filter(i => {
+                if (kidHistoryFilter === "all") return true;
+                if (kidHistoryFilter === "pending") return i.category === "submission" && i.status === "pending";
+                if (kidHistoryFilter === "approved") return i.category === "submission" && i.status === "approved";
+                if (kidHistoryFilter === "rejected") return i.category === "submission" && i.status === "rejected";
+                if (kidHistoryFilter === "redemptions") return i.category === "redemption";
+                return true;
+            });
+
+            const container = document.getElementById("kidHistoryList");
+            if (!container) return;
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="history-empty">No history yet.</div>';
+                return;
+            }
+            container.innerHTML = filtered.map(i => {
+                if (i.category === "submission") {
+                    const badgeClass = i.status === "approved" ? "badge-approved" : i.status === "rejected" ? "badge-rejected" : "badge-pending";
+                    const earnedTxt = i.status === "approved" ? ` · ${i.earnedMinutes} min earned` : "";
+                    const thumb = i.photoURL ? `<img src="${i.photoURL}" class="h-thumb" onclick="openZoom('${i.photoURL}')" onerror="this.style.display='none'">` : "";
+                    return `<div class="history-item">${thumb}<div class="h-info"><strong>${i.subject}</strong><div class="meta">${i.description || ""}</div><div class="meta">📅 ${i.time ? i.time.toLocaleDateString() : ""}</div></div><span class="history-badge ${badgeClass}">${i.status}${earnedTxt}</span></div>`;
+                } else {
+                    const badgeClass = i.type === "manual_adjust" ? "badge-manual" : "badge-redeemed";
+                    const label = i.type === "manual_adjust" ? "Adjusted" : "Redeemed";
+                    const mins = i.minutes > 0 ? `+${i.minutes}` : `${i.minutes}`;
+                    const reasonTxt = i.reason && i.reason !== "No reason provided" ? `<div class="meta">📝 ${i.reason}</div>` : "";
+                    return `<div class="history-item"><div class="h-info"><strong>${label}: ${mins} min</strong><div class="meta">📅 ${i.time ? i.time.toLocaleString() : ""}</div>${reasonTxt}</div><span class="history-badge ${badgeClass}">${label}</span></div>`;
+                }
+            }).join("");
+        }
+
+        kidHistoryUnsub = onSnapshot(subQ, (snap) => {
+            submissions = [];
+            snap.forEach(d => {
+                const data = d.data();
+                submissions.push({ id: d.id, subject: data.subject, description: data.description, photoURL: data.photoURL, status: data.status, earnedMinutes: data.earnedMinutes || 0, time: data.createdAt?.toDate() });
+            });
+            renderKidHistory();
+        }, (err) => console.error("Kid history sub error:", err));
+
+        kidRedemptionsUnsub = onSnapshot(redQ, (snap) => {
+            redemptions = [];
+            snap.forEach(d => {
+                const data = d.data();
+                redemptions.push({ id: d.id, type: data.type, minutes: data.minutes || 0, reason: data.reason || null, time: data.createdAt?.toDate() });
+            });
+            renderKidHistory();
+        }, (err) => console.error("Kid history red error:", err));
+    }
+
+    // ---------- PARENT HISTORY ----------
+    let parentHistoryFilter = "all";
+    async function loadParentHistory() {
+        const subQ = query(collection(db, "submissions"), orderBy("createdAt", "desc"), limit(100));
+        const redQ = query(collection(db, "redemptions"), orderBy("createdAt", "desc"), limit(100));
+        const [subSnap, redSnap] = await Promise.all([getDocs(subQ), getDocs(redQ)]);
+        let items = [];
+        subSnap.forEach(d => {
+            const data = d.data();
+            items.push({ category: "submission", childId: data.childId, subject: data.subject, description: data.description, photoURL: data.photoURL, status: data.status, earnedMinutes: data.earnedMinutes || 0, reason: data.reason || null, time: data.createdAt?.toDate() });
+        });
+        redSnap.forEach(d => {
+            const data = d.data();
+            items.push({ category: "redemption", childId: data.childId, type: data.type, minutes: data.minutes || 0, reason: data.reason || null, time: data.createdAt?.toDate() });
+        });
+        items.sort((a, b) => b.time - a.time);
+
+        const filtered = items.filter(i => parentHistoryFilter === "all" || i.childId === parentHistoryFilter);
+        const container = document.getElementById("parentHistoryList");
+        if (!container) return;
+        if (filtered.length === 0) {
+            container.innerHTML = '<div class="history-empty">No history found.</div>';
+            return;
+        }
+        container.innerHTML = filtered.slice(0, 100).map(i => {
+            const childName = i.childId === "child_umar" ? "Umar" : "Muaz";
+            if (i.category === "submission") {
+                const badgeClass = i.status === "approved" ? "badge-approved" : i.status === "rejected" ? "badge-rejected" : "badge-pending";
+                const earnedTxt = i.status === "approved" ? ` · ${i.earnedMinutes} min` : "";
+                const thumb = i.photoURL ? `<img src="${i.photoURL}" class="h-thumb" onclick="openZoom('${i.photoURL}')" onerror="this.style.display='none'">` : "";
+                return `<div class="history-item">${thumb}<div class="h-info"><strong>${i.subject}</strong><div class="meta">👤 ${childName} · ${i.description || ""}</div><div class="meta">📅 ${i.time ? i.time.toLocaleString() : ""}</div></div><span class="history-badge ${badgeClass}">${i.status}${earnedTxt}</span></div>`;
+            } else {
+                const badgeClass = i.type === "manual_adjust" ? "badge-manual" : "badge-redeemed";
+                const label = i.type === "manual_adjust" ? "Adjusted" : "Redeemed";
+                const mins = i.minutes > 0 ? `+${i.minutes}` : `${i.minutes}`;
+                const reasonTxt = i.reason && i.reason !== "No reason provided" ? `<div class="meta">📝 ${i.reason}</div>` : "";
+                return `<div class="history-item"><div class="h-info"><strong>${label}: ${mins} min</strong><div class="meta">👤 ${childName} · 📅 ${i.time ? i.time.toLocaleString() : ""}</div>${reasonTxt}</div><span class="history-badge ${badgeClass}">${label}</span></div>`;
+            }
+        }).join("");
     }
 
     async function loadWeeklyChart() {
@@ -723,6 +884,7 @@
             loadAuditLog();
             loadWeeklyChart();
             loadParentVideoList();
+            loadParentHistory();
         } else {
             if (pendingSubmissionsUnsub) { pendingSubmissionsUnsub(); pendingSubmissionsUnsub = null; }
         }
@@ -751,7 +913,8 @@
         document.getElementById("parentSection").style.display = "none";
         subscribeChildBalance(currentChildId);
         manageActiveTimer();
-        loadVideosForKids();  // start video listener
+        loadVideosForKids();
+        loadKidHistory();
     };
     document.getElementById("parentModeBtn").onclick = () => {
         document.getElementById("parentModeBtn").classList.add("active");
@@ -760,7 +923,9 @@
         document.getElementById("parentSection").style.display = "block";
         if (parentAuthenticated) showParentContent(true);
         else showParentContent(false);
-        if (videosUnsub) { videosUnsub(); videosUnsub = null; } // stop kid video listener
+        if (videosUnsub) { videosUnsub(); videosUnsub = null; }
+        if (kidHistoryUnsub) { kidHistoryUnsub(); kidHistoryUnsub = null; }
+        if (kidRedemptionsUnsub) { kidRedemptionsUnsub(); kidRedemptionsUnsub = null; }
     };
 
     // Kid UI listeners
@@ -771,6 +936,7 @@
             currentChildId = el.getAttribute("data-child");
             subscribeChildBalance(currentChildId);
             manageActiveTimer();
+            loadKidHistory();
         };
     });
     document.querySelectorAll(".redeem-btn").forEach(btn => btn.onclick = () => redeemMinutes(parseInt(btn.getAttribute("data-minutes"))));
@@ -783,6 +949,7 @@
             btn.classList.add("active");
             const tab = btn.getAttribute("data-tab");
             document.getElementById("approvalsTab").style.display = tab === "approvals" ? "block" : "none";
+            document.getElementById("historyTab").style.display = tab === "history" ? "block" : "none";
             document.getElementById("adminTab").style.display = tab === "admin" ? "block" : "none";
             document.getElementById("auditTab").style.display = tab === "audit" ? "block" : "none";
             document.getElementById("chartTab").style.display = tab === "chart" ? "block" : "none";
@@ -791,6 +958,7 @@
             if (tab === "chart") loadWeeklyChart();
             if (tab === "admin") refreshChildBalances();
             if (tab === "videos") loadParentVideoList();
+            if (tab === "history") loadParentHistory();
         };
     });
 
@@ -801,6 +969,25 @@
     };
     document.getElementById("addVideoBtn").onclick = addVideo;
 
+    // Kid history filter buttons
+    document.querySelectorAll("[data-kid-filter]").forEach(btn => {
+        btn.onclick = () => {
+            document.querySelectorAll("[data-kid-filter]").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            kidHistoryFilter = btn.getAttribute("data-kid-filter");
+            loadKidHistory();
+        };
+    });
+    // Parent history filter buttons
+    document.querySelectorAll("[data-parent-filter]").forEach(btn => {
+        btn.onclick = () => {
+            document.querySelectorAll("[data-parent-filter]").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            parentHistoryFilter = btn.getAttribute("data-parent-filter");
+            loadParentHistory();
+        };
+    });
+
     // Make deleteVideo globally available for onclick
     window.deleteVideo = deleteVideo;
 
@@ -809,6 +996,7 @@
     subscribeChildBalance(currentChildId);
     manageActiveTimer();
     loadVideosForKids();
+    loadKidHistory();
 </script>
 </body>
 </html>
