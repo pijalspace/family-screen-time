@@ -349,6 +349,8 @@
     async function redeemMinutes(minutes) {
         const existingEnd = localStorage.getItem(`screen_timer_end_${currentChildId}`);
         if (existingEnd && parseInt(existingEnd) > Date.now()) return alert("⏰ You already have an active timer!");
+        const childName = currentChildId === "child_umar" ? "Umar" : "Muaz";
+        if (!confirm(`Redeem ${minutes} minutes of screen time for ${childName}?\n\nThis will start a ${minutes}-minute timer and deduct ${minutes} minutes from the balance.`)) return;
         const childRef = doc(db, "children", currentChildId);
         try {
             await runTransaction(db, async (transaction) => {
